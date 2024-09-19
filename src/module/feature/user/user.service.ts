@@ -4,12 +4,14 @@ import {
   InternalServerErrorException,
   NotFoundException,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from './entity/user.entity';
 import { Like, Repository } from 'typeorm';
 import { UpdateUserDto, UserDto, CreateUserDto } from './dto';
 import { sanitizeUser } from 'src/utils/app/sanitize-user';
+import { UserPayload } from 'src/types/user-payload.type';
 
 @Injectable()
 export class UserService {
@@ -58,15 +60,8 @@ export class UserService {
         },
       });
 
-      if (!user) {
-        this.logger.warn(`User with email "${email}" not found`);
-        throw new NotFoundException(`User with email "${email}" not found`);
-      }
-
       return user;
     } catch (error) {
-      if (error instanceof NotFoundException) throw error;
-
       this.logger.error('Failed to find user by email', error.stack);
       throw new InternalServerErrorException(
         'Failed to find user by email',
@@ -90,10 +85,20 @@ export class UserService {
 
   async findAllBySearchTerm(searchTerm: string): Promise<UserDto[]> {
     try {
-      const users = await this.userRepository.findBy({
-        email: Like(`${searchTerm}`),
+      const users = await this.userRepository.find({
+        where: [
+          {
+            email: Like(`%${searchTerm}%`),
+          },
+          {
+            firstName: Like(`%${searchTerm}%`),
+          },
+          {
+            lastName: Like(`%${searchTerm}%`),
+          },
+        ],
       });
-      
+
       return users.map((user) => sanitizeUser(user));
     } catch (error) {
       this.logger.error(
@@ -102,6 +107,35 @@ export class UserService {
       );
       throw new InternalServerErrorException('Failed to retrieve all users');
     }
+  }
+
+  async addUserFriend(friendId: string, currentUser: UserPayload) {
+    const friend = await this.userRepository.findOneBy({ id: friendId });
+
+    if (!friend)
+      throw new NotFoundException(
+        'An error occurred during adding friend. User does not exist',
+      );
+
+    const user = await this.userRepository.findOne({
+      where: { id: currentUser.id },
+      relations: ['friends'],
+    });
+
+    const isAlreadyFriend = user.friends.some((user) => user.id === friend.id);
+
+    if (isAlreadyFriend)
+      throw new BadRequestException(
+        'An error occurred while adding friend. Both users are already friends',
+      );
+
+    user.friends.push(friend);
+    await this.userRepository.save(user);
+
+    return {
+      status: HttpStatus.CREATED,
+      message: 'User added to friends',
+    };
   }
 
   async update(userId: string, updateUserDto: UpdateUserDto): Promise<UserDto> {

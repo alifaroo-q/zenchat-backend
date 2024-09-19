@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   HttpException,
   HttpStatus,
   Injectable,
@@ -25,6 +26,13 @@ export class AuthService {
 
   async register(registerDto: RegisterDto) {
     try {
+      const user = await this.userService.findUserByEmail(registerDto.email);
+
+      if (user)
+        throw new BadRequestException(
+          'An error occurred during registration. User with email exists',
+        );
+
       const { password, ...userInfo } = registerDto;
       let hashedPassword: string;
 

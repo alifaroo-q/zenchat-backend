@@ -24,8 +24,8 @@ export const validationSchema = z.object({
   POSTGRES_SSL: z.string().default('false'),
 
   // JWT
-  USER_SECRET_KEY: z.string().default('user_secret'),
-  USER_EXPIRES_IN: z.string().default('1d'),
+  JWT_SECRET_KEY: z.string().default('user_secret'),
+  JWT_EXPIRES_IN: z.string().default('1d'),
 });
 
 export type Config = z.infer<typeof validationSchema>;
