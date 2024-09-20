@@ -1,5 +1,4 @@
-import { Logger, UnauthorizedException } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
+import { Logger } from '@nestjs/common';
 import {
   OnGatewayConnection,
   OnGatewayDisconnect,
@@ -8,7 +7,9 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { UserPayload } from 'src/types/user-payload.type';
+import { AuthService } from 'src/module/core/auth/auth.service';
+import { RoomService } from './room.service';
+import { CreateRoomDto } from './dto/create-room.dto';
 
 @WebSocketGateway()
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
@@ -17,7 +18,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
 
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly roomService: RoomService,
+  ) {}
 
   private connectedUser = new Map<string, string>();
 
@@ -27,40 +31,14 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   handleConnection(client: Socket) {
     try {
-      const token = this.authenticateSocket(client);
-      this.connectedUser.set(client.id, token.id);
-      this.logger.log(`${token.id} - Connected`);
+      const authenticatedUser = this.authService.authenticateSocket(client);
+      this.connectedUser.set(client.id, authenticatedUser.id);
+      client.data.user = authenticatedUser;
+
+      this.logger.log(`${authenticatedUser.id} - Connected`);
     } catch (error) {
       this.handleConnectionError(client, error);
     }
-  }
-
-  handleDisconnect(client: any) {
-    throw new Error('Method not implemented.');
-  }
-
-  @SubscribeMessage('message')
-  handleMessage(client: any, payload: any): string {
-    return 'Hello world!';
-  }
-
-  private authenticateSocket(socket: Socket): UserPayload {
-    const token = this.extractJwtToken(socket);
-    return this.jwtService.verify<UserPayload>(token, {
-      secret: process.env.JWT_SECRET_KEY,
-    });
-  }
-
-  private extractJwtToken(socket: Socket): string {
-    const authHeader = socket.handshake.headers.authorization;
-    if (!authHeader)
-      throw new UnauthorizedException('No authorization header found');
-
-    const [bearer, token] = authHeader.split(' ');
-    if (bearer !== 'Bearer' || !token)
-      throw new UnauthorizedException('Invalid or missing token');
-
-    return token;
   }
 
   private handleConnectionError(socket: Socket, error: Error): void {
@@ -69,5 +47,14 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     );
     socket.emit('exception', 'Authentication error');
     socket.disconnect();
+  }
+
+  handleDisconnect(client: any) {
+    this.logger.log(`Client disconnected: ${client.id}`);
+  }
+
+  @SubscribeMessage('CreateRoom')
+  handleCreateRoom(client: Socket, payload: CreateRoomDto) {
+    return this.roomService.createRoom(client, payload);
   }
 }

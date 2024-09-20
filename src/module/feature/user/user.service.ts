@@ -110,32 +110,41 @@ export class UserService {
   }
 
   async addUserFriend(friendId: string, currentUser: UserPayload) {
-    const friend = await this.userRepository.findOneBy({ id: friendId });
+    try {
+      const friend = await this.userRepository.findOneBy({ id: friendId });
 
-    if (!friend)
-      throw new NotFoundException(
-        'An error occurred during adding friend. User does not exist',
+      if (!friend)
+        throw new NotFoundException(
+          'An error occurred during adding friend. User does not exist',
+        );
+
+      const user = await this.userRepository.findOne({
+        where: { id: currentUser.id },
+        relations: ['friends'],
+      });
+
+      const isAlreadyFriend = user.friends.some(
+        (user) => user.id === friend.id,
       );
 
-    const user = await this.userRepository.findOne({
-      where: { id: currentUser.id },
-      relations: ['friends'],
-    });
+      if (isAlreadyFriend)
+        throw new BadRequestException(
+          'An error occurred while adding friend. Both users are already friends',
+        );
 
-    const isAlreadyFriend = user.friends.some((user) => user.id === friend.id);
+      user.friends.push(friend);
+      await this.userRepository.save(user);
 
-    if (isAlreadyFriend)
-      throw new BadRequestException(
-        'An error occurred while adding friend. Both users are already friends',
+      return {
+        status: HttpStatus.CREATED,
+        message: 'User added to friends',
+      };
+    } catch (error) {
+      this.logger.error(`Failed to add friend: ${error.message}`, error.stack);
+      throw new InternalServerErrorException(
+        `Failed to add friend with ID "${friendId}" to user`,
       );
-
-    user.friends.push(friend);
-    await this.userRepository.save(user);
-
-    return {
-      status: HttpStatus.CREATED,
-      message: 'User added to friends',
-    };
+    }
   }
 
   async update(userId: string, updateUserDto: UpdateUserDto): Promise<UserDto> {
