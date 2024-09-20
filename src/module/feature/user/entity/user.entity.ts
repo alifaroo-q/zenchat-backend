@@ -6,6 +6,8 @@ import {
   ManyToMany,
   JoinTable,
 } from 'typeorm';
+import { Message } from '../../chat/entity/message.entity';
+import { Room } from '../../chat/entity/room.entity';
 
 @Entity('users')
 export class User {
@@ -23,6 +25,12 @@ export class User {
 
   @Column()
   password: string;
+
+  @ManyToMany(() => Room, (room) => room.participants)
+  rooms: Room[];
+
+  @OneToMany(() => Message, (message) => message.creator)
+  messages: Message[];
 
   @ManyToMany(() => User)
   @JoinTable({

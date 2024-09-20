@@ -13,6 +13,9 @@ import { LoginDto, RegisterDto } from './dto';
 
 import * as bcrypt from 'bcrypt';
 import { ConfigService } from '@nestjs/config';
+import { extractJwtToken } from 'src/utils/app/extract-jwt';
+import { UserPayload } from 'src/types/user-payload.type';
+import { Socket } from 'socket.io';
 
 @Injectable()
 export class AuthService {
@@ -20,7 +23,7 @@ export class AuthService {
 
   constructor(
     private readonly userService: UserService,
-    private jwtService: JwtService,
+    private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {}
 
@@ -42,6 +45,7 @@ export class AuthService {
           this.configService.get('app.saltLength'),
         );
       } catch (error) {
+        this.logger.error('An error occurred during hashing password', error);
         throw new HttpException(
           'Error hashing password',
           HttpStatus.BAD_REQUEST,
@@ -92,6 +96,13 @@ export class AuthService {
       this.logger.error(`Login failed: ${error.message}`, error.stack);
       throw new UnauthorizedException('Login failed. Please try again later.');
     }
+  }
+
+  authenticateSocket(socket: Socket): UserPayload {
+    const token = extractJwtToken(socket);
+    return this.jwtService.verify<UserPayload>(token, {
+      secret: process.env.JWT_SECRET_KEY,
+    });
   }
 
   private generateAccessToken(id: string, email: string): string {
