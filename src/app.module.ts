@@ -7,6 +7,8 @@ import { PostgreSQLConfig } from './config/database/orm.config';
 import { AuthModule } from './module/core/auth/auth.module';
 import { UserModule } from './module/feature/user/user.module';
 import { ChatModule } from './module/feature/chat/chat.module';
+import { RoomModule } from './module/feature/room/room.module';
+import { MessageModule } from './module/feature/message/message.module';
 
 @Module({
   imports: [
@@ -15,6 +17,8 @@ import { ChatModule } from './module/feature/chat/chat.module';
     AuthModule,
     UserModule,
     ChatModule,
+    RoomModule,
+    MessageModule,
   ],
   controllers: [AppController],
   providers: [AppService],

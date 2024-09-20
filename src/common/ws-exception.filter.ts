@@ -6,7 +6,7 @@ import { Socket } from 'socket.io';
 export class WsExceptionFilter implements ExceptionFilter {
   catch(exception: WsException, host: ArgumentsHost) {
     const client = host.switchToWs().getClient<Socket>();
-    client.emit('exception', {
+    client.emit('EXCEPTION', {
       status: 'error',
       message: exception.getError(),
     });
