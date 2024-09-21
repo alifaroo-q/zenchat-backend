@@ -16,9 +16,14 @@ import { MessageService } from '../message/message.service';
 import { CreateMessageDto } from './dto/create-message.dto';
 import { WsValidationPipe } from 'src/pipes/ws-validation.pipe';
 import { WsExceptionFilter } from 'src/common/ws-exception.filter';
+import { WS_CLIENT_EVENTS, WS_SEVER_EVENTS } from 'src/enum/ws-events.enum';
 
 @UseFilters(WsExceptionFilter)
-@WebSocketGateway()
+@WebSocketGateway({
+  cors: {
+    origin: '*',
+  },
+})
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private readonly logger = new Logger(ChatGateway.name);
 
@@ -56,12 +61,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.logger.log(`Client disconnected: ${client.id}`);
   }
 
-  @SubscribeMessage('JOIN_ROOMS')
+  @SubscribeMessage(WS_SEVER_EVENTS.JOIN_ROOMS)
   handleJoinRooms(client: Socket) {
     return this.roomService.joinRooms(client);
   }
 
-  @SubscribeMessage('CREATE_ROOM')
+  @SubscribeMessage(WS_SEVER_EVENTS.CREATE_ROOM)
   handleCreateRoom(
     client: Socket,
     @MessageBody(new WsValidationPipe()) payload: CreateRoomDto,
@@ -69,12 +74,14 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     return this.roomService.createRoom(client, payload);
   }
 
-  @SubscribeMessage('NEW_MESSAGE')
+  @SubscribeMessage(WS_SEVER_EVENTS.NEW_MESSAGE)
   handleNewMessage(
     client: Socket,
     @MessageBody(new WsValidationPipe()) payload: CreateMessageDto,
   ) {
-    client.to(payload.roomId).emit('RECEIVED_MESSAGE', payload.message);
+    client
+      .to(payload.roomId)
+      .emit(WS_CLIENT_EVENTS.RECEIVED_MESSAGE, payload.message);
     return this.messageService.createNewMessageByRoomId(client, payload);
   }
 }
