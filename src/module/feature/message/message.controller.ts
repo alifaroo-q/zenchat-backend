@@ -1,6 +1,6 @@
 import { Controller, Get, Param, UseGuards } from '@nestjs/common';
-import { MessageService } from './message.service';
 import { JwtAuthGuard } from 'src/module/core/auth/guard/jwt-auth.guard';
+import { MessageService } from './message.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('messages')

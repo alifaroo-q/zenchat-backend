@@ -2,23 +2,27 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
-import { Socket } from 'socket.io';
-import { CreateRoomDto } from '../chat/dto/create-room.dto';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Room } from './entity/room.entity';
-import { Repository } from 'typeorm';
-import { User } from '../user/entity/user.entity';
+import { Socket } from 'socket.io';
 import { handleWsError } from 'src/utils/app/ws-error-handler';
+import { Repository } from 'typeorm';
+import { CreateRoomDto } from '../chat/dto/create-room.dto';
+import { User } from '../user/entity/user.entity';
+import { UserService } from '../user/user.service';
+import { Room } from './entity/room.entity';
 
 @Injectable()
 export class RoomService {
   private readonly logger = new Logger(RoomService.name);
 
   constructor(
+    private readonly userService: UserService,
     @InjectRepository(Room) private readonly roomRepository: Repository<Room>,
-    @InjectRepository(User) private readonly userRepository: Repository<User>,
   ) {}
+
+  // WEB SOCKET HANDLERS (START)
 
   async createRoom(client: Socket, payload: CreateRoomDto) {
     try {
@@ -35,20 +39,18 @@ export class RoomService {
       });
 
       participants.forEach(async (participant) => {
-        const user = await this.userRepository.findOneBy({ id: participant });
+        const user = (await this.userService.findOne(participant)) as User;
         savedRoom.participants.push(user);
       });
 
-      const roomCreator = await this.userRepository.findOneBy({
-        id: client.data.user.id,
-      });
+      const roomCreator = (await this.userService.findOne(
+        client.data.user.id,
+      )) as User;
 
       savedRoom.participants.push(roomCreator);
 
       const room = await this.roomRepository.save(savedRoom);
       await client.join(room.id);
-
-      return room;
     } catch (error) {
       this.logger.error(
         `Cannot create room for socket ${client.id}: ${error.message}`,
@@ -56,6 +58,19 @@ export class RoomService {
       handleWsError(client, error);
     }
   }
+
+  async joinRooms(client: Socket) {
+    const userId = client.data.user.id;
+    const rooms = await this.findAllRoomsByUser(userId);
+
+    rooms.forEach(async (room) => {
+      await client.join(room.id);
+    });
+  }
+
+  // WEB SOCKET HANDLERS (END)
+
+  // HTTP HANDLERS (START)
 
   async findAllRoomsByUser(userId: string) {
     try {
@@ -76,14 +91,22 @@ export class RoomService {
     }
   }
 
-  
+  async findOne(roomId: string) {
+    try {
+      const room = await this.roomRepository.findOneBy({ id: roomId });
+      if (!room) {
+        this.logger.warn(`Room with ID "${roomId}" not found`);
+        throw new NotFoundException(`Room with ID "${roomId}" not found`);
+      }
 
-  async joinRooms(client: Socket) {
-    const userId = client.data.user.id;
-    const rooms = await this.findAllRoomsByUser(userId);
-
-    rooms.forEach(async (room) => {
-      await client.join(room.id);
-    });
+      return room;
+    } catch (error) {
+      this.logger.error('An error occurred while finding room');
+      throw new InternalServerErrorException(
+        'An error occurred while finding room with provided id',
+      );
+    }
   }
+
+  // HTTP HANDLERS (END)
 }

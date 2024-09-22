@@ -7,15 +7,16 @@ import {
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
-import { UserService } from '../../feature/user/user.service';
 import { JwtService } from '@nestjs/jwt';
+import { UserService } from '../../feature/user/user.service';
 import { LoginDto, RegisterDto } from './dto';
 
-import * as bcrypt from 'bcrypt';
 import { ConfigService } from '@nestjs/config';
-import { extractJwtToken } from 'src/utils/app/extract-jwt';
-import { UserPayload } from 'src/types/user-payload.type';
+import * as bcrypt from 'bcrypt';
 import { Socket } from 'socket.io';
+import { User } from 'src/module/feature/user/entity/user.entity';
+import { UserPayload } from 'src/types/user-payload.type';
+import { extractJwtToken } from 'src/utils/app/extract-jwt';
 
 @Injectable()
 export class AuthService {
@@ -29,7 +30,10 @@ export class AuthService {
 
   async register(registerDto: RegisterDto) {
     try {
-      const user = await this.userService.findUserByEmail(registerDto.email);
+      const user = (await this.userService.findOneByEmail(
+        registerDto.email,
+        false,
+      )) as User;
 
       if (user)
         throw new BadRequestException(
@@ -73,7 +77,10 @@ export class AuthService {
   async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
     try {
-      const user = await this.userService.findUserByEmail(email);
+      const user = (await this.userService.findOneByEmail(
+        email,
+        false,
+      )) as User;
 
       if (!user) {
         this.logger.warn(`Invalid email "${email}" or password`);
