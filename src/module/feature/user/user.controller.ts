@@ -1,19 +1,19 @@
 import {
-  Controller,
-  Get,
-  Put,
-  Delete,
   Body,
+  Controller,
+  Delete,
+  Get,
   Param,
   Post,
+  Put,
   UseGuards,
 } from '@nestjs/common';
 
-import { UserService } from './user.service';
-import { UserDto, UpdateUserDto } from './dto';
-import { JwtAuthGuard } from 'src/module/core/auth/guard/jwt-auth.guard';
 import { CurrentUser } from 'src/module/core/auth/decorator/current-user.decorator';
+import { JwtAuthGuard } from 'src/module/core/auth/guard/jwt-auth.guard';
 import { UserPayload } from 'src/types/user-payload.type';
+import { UpdateUserDto, UserDto } from './dto';
+import { UserService } from './user.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('users')

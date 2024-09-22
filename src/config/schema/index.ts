@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as Joi from 'joi';
 
 /**
  * @description This is the schema for the .env file.
@@ -7,25 +7,23 @@ import { z } from 'zod';
  * Comment out those lines if you don't want to use the .env file.
  * For example: Initially, you don't have the AWS keys, so you can comment out the AWS keys.
  */
-export const validationSchema = z.object({
-  // APP
 
-  TZ: z.string().default('UTC'),
-  NODE_ENV: z.string().default('development'),
-  PORT: z.coerce.number().default(3000),
-  SALT_LENGHT: z.coerce.number().default(10),
+export const validationSchema = Joi.object({
+  // APP
+  TZ: Joi.string().default('UTC'),
+  NODE_ENV: Joi.string().default('development'),
+  PORT: Joi.number().port().default(3000),
+  SALT_LENGHT: Joi.number().default(10),
 
   // DATABASE
-  POSTGRES_HOST: z.string().default('localhost'),
-  POSTGRES_PORT: z.coerce.number().default(5432),
-  POSTGRES_USER: z.string().default('postgres'),
-  POSTGRES_PASSWORD: z.string().default('postgres'),
-  POSTGRES_DATABASE: z.string().default('postgres'),
-  POSTGRES_SSL: z.string().default('false'),
+  POSTGRES_HOST: Joi.string().required(),
+  POSTGRES_PORT: Joi.number().port().default(5432).required(),
+  POSTGRES_USER: Joi.string().required(),
+  POSTGRES_PASSWORD: Joi.string().required(),
+  POSTGRES_DATABASE: Joi.string().required(),
+  POSTGRES_SSL: Joi.string().default('false').required(),
 
   // JWT
-  JWT_SECRET_KEY: z.string().default('user_secret'),
-  JWT_EXPIRES_IN: z.string().default('1d'),
+  JWT_SECRET_KEY: Joi.string().required(),
+  JWT_EXPIRES_IN: Joi.string().required(),
 });
-
-export type Config = z.infer<typeof validationSchema>;

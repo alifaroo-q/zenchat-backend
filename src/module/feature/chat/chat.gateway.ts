@@ -1,5 +1,6 @@
 import { Logger, UseFilters } from '@nestjs/common';
 import {
+  ConnectedSocket,
   MessageBody,
   OnGatewayConnection,
   OnGatewayDisconnect,
@@ -8,17 +9,22 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import { WsExceptionFilter } from 'src/common/ws-exception.filter';
+import { WS_CLIENT_EVENTS, WS_SEVER_EVENTS } from 'src/enum/ws-events.enum';
 import { AuthService } from 'src/module/core/auth/auth.service';
-import { RoomService } from '../room/room.service';
-import { CreateRoomDto } from './dto/create-room.dto';
+import { WsValidationPipe } from 'src/pipes/ws-validation.pipe';
 import { handleWsError } from 'src/utils/app/ws-error-handler';
 import { MessageService } from '../message/message.service';
+import { RoomService } from '../room/room.service';
 import { CreateMessageDto } from './dto/create-message.dto';
-import { WsValidationPipe } from 'src/pipes/ws-validation.pipe';
-import { WsExceptionFilter } from 'src/common/ws-exception.filter';
+import { CreateRoomDto } from './dto/create-room.dto';
 
 @UseFilters(WsExceptionFilter)
-@WebSocketGateway()
+@WebSocketGateway({
+  cors: {
+    origin: '*',
+  },
+})
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private readonly logger = new Logger(ChatGateway.name);
 
@@ -33,17 +39,17 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   private connectedUser = new Map<string, string>();
 
-  async onModuleInit(): Promise<void> {
+  onModuleInit() {
     this.logger.log('ChatGateway initialized');
   }
 
-  handleConnection(client: Socket) {
+  handleConnection(@ConnectedSocket() client: Socket) {
     try {
       const authenticatedUser = this.authService.authenticateSocket(client);
       this.connectedUser.set(client.id, authenticatedUser.id);
       client.data.user = authenticatedUser;
 
-      this.logger.log(`${authenticatedUser.id} - Connected`);
+      this.logger.log(`Client connected: ${authenticatedUser.id}`);
     } catch (error) {
       this.logger.error(
         `Connection error for socket ${client.id}: ${error.message}`,
@@ -52,29 +58,37 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-  handleDisconnect(client: Socket) {
-    this.logger.log(`Client disconnected: ${client.id}`);
+  handleDisconnect(@ConnectedSocket() client: Socket) {
+    this.logger.log(
+      `Client disconnected: ${this.connectedUser.get(client.id)}`,
+    );
   }
 
-  @SubscribeMessage('JOIN_ROOMS')
-  handleJoinRooms(client: Socket) {
-    return this.roomService.joinRooms(client);
+  @SubscribeMessage(WS_SEVER_EVENTS.JOIN_ROOMS)
+  async handleJoinRooms(@ConnectedSocket() client: Socket) {
+    await this.roomService.joinRooms(client);
+    return true;
   }
 
-  @SubscribeMessage('CREATE_ROOM')
-  handleCreateRoom(
-    client: Socket,
+  @SubscribeMessage(WS_SEVER_EVENTS.CREATE_ROOM)
+  async handleCreateRoom(
+    @ConnectedSocket() client: Socket,
     @MessageBody(new WsValidationPipe()) payload: CreateRoomDto,
   ) {
-    return this.roomService.createRoom(client, payload);
+    await this.roomService.createRoom(client, payload);
+    return true;
   }
 
-  @SubscribeMessage('NEW_MESSAGE')
-  handleNewMessage(
-    client: Socket,
+  @SubscribeMessage(WS_SEVER_EVENTS.NEW_MESSAGE)
+  async handleNewMessage(
+    @ConnectedSocket() client: Socket,
     @MessageBody(new WsValidationPipe()) payload: CreateMessageDto,
   ) {
-    client.to(payload.roomId).emit('RECEIVED_MESSAGE', payload.message);
-    return this.messageService.createNewMessageByRoomId(client, payload);
+    client
+      .to(payload.roomId)
+      .emit(WS_CLIENT_EVENTS.RECEIVED_MESSAGE, payload.message);
+
+    await this.messageService.createNewMessageByRoomId(client, payload);
+    return true;
   }
 }

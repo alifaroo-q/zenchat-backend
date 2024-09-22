@@ -2,25 +2,36 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
-import { Socket } from 'socket.io';
-import { CreateRoomDto } from '../chat/dto/create-room.dto';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Room } from './entity/room.entity';
-import { Repository } from 'typeorm';
-import { User } from '../user/entity/user.entity';
+import { Socket } from 'socket.io';
 import { handleWsError } from 'src/utils/app/ws-error-handler';
+import { Repository } from 'typeorm';
+import { CreateRoomDto } from '../chat/dto/create-room.dto';
+import { UserService } from '../user/user.service';
+import { Room } from './entity/room.entity';
+import { RoomTypeEnum } from 'src/enum/room-type.enum';
+import { WsException } from '@nestjs/websockets';
 
 @Injectable()
 export class RoomService {
   private readonly logger = new Logger(RoomService.name);
 
   constructor(
+    private readonly userService: UserService,
     @InjectRepository(Room) private readonly roomRepository: Repository<Room>,
-    @InjectRepository(User) private readonly userRepository: Repository<User>,
   ) {}
 
+  // WEB SOCKET HANDLERS (START)
+
   async createRoom(client: Socket, payload: CreateRoomDto) {
+    if (
+      payload.type === RoomTypeEnum.DIRECT_CHAT &&
+      payload.participants.length > 1
+    ) {
+      throw new WsException('Direct chat can have only one participant');
+    }
     try {
       const { participants, ...rest } = payload;
       const newRoom = await this.roomRepository.save({
@@ -29,26 +40,15 @@ export class RoomService {
         updatedBy: client.data.user.id,
       });
 
-      const savedRoom = await this.roomRepository.findOne({
-        where: { id: newRoom.id },
-        relations: ['participants'],
-      });
+      const participantUsers = await this.userService.findManyByIds([
+        ...participants,
+        client.data.user.id,
+      ]);
 
-      participants.forEach(async (participant) => {
-        const user = await this.userRepository.findOneBy({ id: participant });
-        savedRoom.participants.push(user);
-      });
+      newRoom.participants = participantUsers;
+      const room = await this.roomRepository.save(newRoom);
 
-      const roomCreator = await this.userRepository.findOneBy({
-        id: client.data.user.id,
-      });
-
-      savedRoom.participants.push(roomCreator);
-
-      const room = await this.roomRepository.save(savedRoom);
       await client.join(room.id);
-
-      return room;
     } catch (error) {
       this.logger.error(
         `Cannot create room for socket ${client.id}: ${error.message}`,
@@ -56,6 +56,23 @@ export class RoomService {
       handleWsError(client, error);
     }
   }
+
+  async joinRooms(client: Socket) {
+    try {
+      const userId = client.data.user.id;
+      const rooms = await this.findAllRoomsByUser(userId);
+      await Promise.all(rooms.map((room) => client.join(room.id)));
+    } catch (error) {
+      this.logger.error(
+        `Cannot join rooms for socket ${client.id}: ${error.message}`,
+      );
+      handleWsError(client, error);
+    }
+  }
+
+  // WEB SOCKET HANDLERS (END)
+
+  // HTTP HANDLERS (START)
 
   async findAllRoomsByUser(userId: string) {
     try {
@@ -76,14 +93,22 @@ export class RoomService {
     }
   }
 
-  
+  async findOne(roomId: string) {
+    try {
+      const room = await this.roomRepository.findOneBy({ id: roomId });
+      if (!room) {
+        this.logger.warn(`Room with ID "${roomId}" not found`);
+        throw new NotFoundException(`Room with ID "${roomId}" not found`);
+      }
 
-  async joinRooms(client: Socket) {
-    const userId = client.data.user.id;
-    const rooms = await this.findAllRoomsByUser(userId);
-
-    rooms.forEach(async (room) => {
-      await client.join(room.id);
-    });
+      return room;
+    } catch (error) {
+      this.logger.error('An error occurred while finding room');
+      throw new InternalServerErrorException(
+        'An error occurred while finding room with provided id',
+      );
+    }
   }
+
+  // HTTP HANDLERS (END)
 }

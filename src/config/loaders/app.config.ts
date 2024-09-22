@@ -6,5 +6,5 @@ export default registerAs('app', () => ({
   port: parseInt(process.env.PORT, 10) || 3000,
   jwtSecretKey: process.env.JWT_SECRET_KEY,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN,
-  saltLength: process.env.SALT_LENGTH || 10,
+  saltLength: parseInt(process.env.SALT_LENGTH) || 10,
 }));

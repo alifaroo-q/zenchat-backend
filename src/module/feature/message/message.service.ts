@@ -4,32 +4,31 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Message } from './entity/message.entity';
-import { Repository } from 'typeorm';
 import { Socket } from 'socket.io';
+import { Repository } from 'typeorm';
+import { RoomService } from '../room/room.service';
 import { User } from '../user/entity/user.entity';
-import { Room } from '../room/entity/room.entity';
+import { UserService } from '../user/user.service';
+import { Message } from './entity/message.entity';
 
 @Injectable()
 export class MessageService {
   private readonly logger = new Logger(MessageService.name);
 
   constructor(
+    private readonly userService: UserService,
+    private readonly roomService: RoomService,
     @InjectRepository(Message)
     private readonly messageRepository: Repository<Message>,
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
-    @InjectRepository(Room)
-    private readonly roomRepository: Repository<Room>,
   ) {}
 
   async createNewMessageByRoomId(client: Socket, payload: any) {
     try {
-      const user = await this.userRepository.findOneBy({
-        id: client.data.user.id,
-      });
+      const user = (await this.userService.findOne(
+        client.data.user.id,
+      )) as User;
 
-      const room = await this.roomRepository.findOneBy({ id: payload.roomId });
+      const room = await this.roomService.findOne(payload.roomId);
 
       const message = this.messageRepository.create({
         creator: user,

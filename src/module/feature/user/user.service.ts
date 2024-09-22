@@ -1,17 +1,17 @@
 import {
-  Injectable,
-  Logger,
-  InternalServerErrorException,
-  NotFoundException,
-  HttpStatus,
   BadRequestException,
+  HttpStatus,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { User } from './entity/user.entity';
-import { Like, Repository } from 'typeorm';
-import { UpdateUserDto, UserDto, CreateUserDto } from './dto';
-import { sanitizeUser } from 'src/utils/app/sanitize-user';
 import { UserPayload } from 'src/types/user-payload.type';
+import { sanitizeUser } from 'src/utils/app/sanitize-user';
+import { In, Like, Repository } from 'typeorm';
+import { CreateUserDto, UpdateUserDto, UserDto } from './dto';
+import { User } from './entity/user.entity';
 
 @Injectable()
 export class UserService {
@@ -32,7 +32,30 @@ export class UserService {
     }
   }
 
-  async findOne(userId: string): Promise<UserDto> {
+  async findManyByIds(userIds: string[]): Promise<User[]> {
+    try {
+      const users = await this.userRepository.find({
+        where: {
+          id: In(userIds),
+        },
+      });
+
+      return users;
+    } catch (error) {
+      this.logger.error(
+        `Failed to retrieve all users with given ids: ${error.message}`,
+        error.stack,
+      );
+      throw new InternalServerErrorException(
+        'Failed to retrieve all users with ids',
+      );
+    }
+  }
+
+  async findOne(
+    userId: string,
+    sanitize: boolean = true,
+  ): Promise<UserDto | User> {
     try {
       const user = await this.userRepository.findOne({
         where: {
@@ -45,14 +68,17 @@ export class UserService {
         throw new NotFoundException(`User with ID "${userId}" not found`);
       }
 
-      return sanitizeUser(user);
+      return sanitize ? sanitizeUser(user) : user;
     } catch (error) {
       this.logger.error(`Failed to find user: ${error.message}`, error.stack);
       throw new NotFoundException(`Failed to find user with ID "${userId}"`);
     }
   }
 
-  async findUserByEmail(email: string): Promise<User> {
+  async findOneByEmail(
+    email: string,
+    sanitize: boolean = true,
+  ): Promise<UserDto | User> {
     try {
       const user = await this.userRepository.findOne({
         where: {
@@ -60,7 +86,7 @@ export class UserService {
         },
       });
 
-      return user;
+      return sanitize ? sanitizeUser(user) : user;
     } catch (error) {
       this.logger.error('Failed to find user by email', error.stack);
       throw new InternalServerErrorException(

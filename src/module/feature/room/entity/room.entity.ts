@@ -1,15 +1,15 @@
 import {
-  Entity,
   Column,
-  ManyToMany,
+  CreateDateColumn,
+  Entity,
   JoinTable,
+  ManyToMany,
   OneToMany,
   PrimaryGeneratedColumn,
-  CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { User } from '../../user/entity/user.entity';
 import { Message } from '../../message/entity/message.entity';
+import { User } from '../../user/entity/user.entity';
 
 @Entity('rooms')
 export class Room {
