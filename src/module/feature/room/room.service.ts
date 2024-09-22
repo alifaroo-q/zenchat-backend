@@ -9,9 +9,10 @@ import { Socket } from 'socket.io';
 import { handleWsError } from 'src/utils/app/ws-error-handler';
 import { Repository } from 'typeorm';
 import { CreateRoomDto } from '../chat/dto/create-room.dto';
-import { User } from '../user/entity/user.entity';
 import { UserService } from '../user/user.service';
 import { Room } from './entity/room.entity';
+import { RoomTypeEnum } from 'src/enum/room-type.enum';
+import { WsException } from '@nestjs/websockets';
 
 @Injectable()
 export class RoomService {
@@ -25,6 +26,12 @@ export class RoomService {
   // WEB SOCKET HANDLERS (START)
 
   async createRoom(client: Socket, payload: CreateRoomDto) {
+    if (
+      payload.type === RoomTypeEnum.DIRECT_CHAT &&
+      payload.participants.length > 1
+    ) {
+      throw new WsException('Direct chat can have only one participant');
+    }
     try {
       const { participants, ...rest } = payload;
       const newRoom = await this.roomRepository.save({
@@ -33,23 +40,14 @@ export class RoomService {
         updatedBy: client.data.user.id,
       });
 
-      const savedRoom = await this.roomRepository.findOne({
-        where: { id: newRoom.id },
-        relations: ['participants'],
-      });
-
-      participants.forEach(async (participant) => {
-        const user = (await this.userService.findOne(participant)) as User;
-        savedRoom.participants.push(user);
-      });
-
-      const roomCreator = (await this.userService.findOne(
+      const participantUsers = await this.userService.findManyByIds([
+        ...participants,
         client.data.user.id,
-      )) as User;
+      ]);
 
-      savedRoom.participants.push(roomCreator);
+      newRoom.participants = participantUsers;
+      const room = await this.roomRepository.save(newRoom);
 
-      const room = await this.roomRepository.save(savedRoom);
       await client.join(room.id);
     } catch (error) {
       this.logger.error(
@@ -60,12 +58,16 @@ export class RoomService {
   }
 
   async joinRooms(client: Socket) {
-    const userId = client.data.user.id;
-    const rooms = await this.findAllRoomsByUser(userId);
-
-    rooms.forEach(async (room) => {
-      await client.join(room.id);
-    });
+    try {
+      const userId = client.data.user.id;
+      const rooms = await this.findAllRoomsByUser(userId);
+      await Promise.all(rooms.map((room) => client.join(room.id)));
+    } catch (error) {
+      this.logger.error(
+        `Cannot join rooms for socket ${client.id}: ${error.message}`,
+      );
+      handleWsError(client, error);
+    }
   }
 
   // WEB SOCKET HANDLERS (END)

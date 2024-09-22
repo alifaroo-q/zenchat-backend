@@ -9,7 +9,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { UserPayload } from 'src/types/user-payload.type';
 import { sanitizeUser } from 'src/utils/app/sanitize-user';
-import { Like, Repository } from 'typeorm';
+import { In, Like, Repository } from 'typeorm';
 import { CreateUserDto, UpdateUserDto, UserDto } from './dto';
 import { User } from './entity/user.entity';
 
@@ -29,6 +29,26 @@ export class UserService {
     } catch (error) {
       this.logger.error(`Failed to create user: ${error.message}`, error.stack);
       throw new InternalServerErrorException('Failed to create user');
+    }
+  }
+
+  async findManyByIds(userIds: string[]): Promise<User[]> {
+    try {
+      const users = await this.userRepository.find({
+        where: {
+          id: In(userIds),
+        },
+      });
+
+      return users;
+    } catch (error) {
+      this.logger.error(
+        `Failed to retrieve all users with given ids: ${error.message}`,
+        error.stack,
+      );
+      throw new InternalServerErrorException(
+        'Failed to retrieve all users with ids',
+      );
     }
   }
 
