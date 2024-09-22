@@ -9,6 +9,6 @@ export class MessageController {
 
   @Get('/room/:roomId')
   async findAllByRoomId(@Param('roomId') roomId: string) {
-    return this.messageService.findAllByRoomId(roomId)
+    return this.messageService.findAllByRoomId(roomId);
   }
 }
