@@ -4,18 +4,15 @@ import {
   Delete,
   Get,
   Param,
-  Post,
   Put,
   UseGuards,
 } from '@nestjs/common';
 
-import { CurrentUser } from 'src/module/core/auth/decorator/current-user.decorator';
 import { JwtAuthGuard } from 'src/module/core/auth/guard/jwt-auth.guard';
-import { UserPayload } from 'src/types/user-payload.type';
 import { UpdateUserDto, UserDto } from './dto';
 import { UserService } from './user.service';
 
-@UseGuards(JwtAuthGuard)
+// @UseGuards(JwtAuthGuard)
 @Controller('users')
 export class UserController {
   constructor(private readonly userService: UserService) {}
@@ -35,14 +32,6 @@ export class UserController {
     @Param('searchTerm') searchTerm: string,
   ): Promise<UserDto[]> {
     return await this.userService.findAllBySearchTerm(searchTerm);
-  }
-
-  @Post('/friend/add/:id')
-  async addUserFriend(
-    @Param('id') friendId: string,
-    @CurrentUser() currentUser: UserPayload,
-  ) {
-    return this.userService.addUserFriend(friendId, currentUser);
   }
 
   @Put(':id')

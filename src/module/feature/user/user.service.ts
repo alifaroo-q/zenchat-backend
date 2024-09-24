@@ -9,7 +9,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { UserPayload } from 'src/types/user-payload.type';
 import { sanitizeUser } from 'src/utils/app/sanitize-user';
-import { In, Like, Repository } from 'typeorm';
+import { Brackets, ILike, In, Like, Or, Repository } from 'typeorm';
 import { CreateUserDto, UpdateUserDto, UserDto } from './dto';
 import { User } from './entity/user.entity';
 
@@ -111,21 +111,25 @@ export class UserService {
 
   async findAllBySearchTerm(searchTerm: string): Promise<UserDto[]> {
     try {
-      const users = await this.userRepository.find({
-        where: [
-          {
-            email: Like(`%${searchTerm}%`),
-          },
-          {
-            firstName: Like(`%${searchTerm}%`),
-          },
-          {
-            lastName: Like(`%${searchTerm}%`),
-          },
-        ],
-      });
+      const userQuery = this.userRepository.createQueryBuilder('users');
+      const sql = await userQuery
+        .leftJoinAndSelect('users.rooms', 'room')
+        .where('users.firstName ILIKE :searchTerm', { searchTerm })
+        .orWhere('users.lastName ILIKE :searchTerm', { searchTerm })
+        .andWhere(
+          new Brackets((qb) => {
+            qb.where(
+              'room.id NOT IN (SELECT "roomId" FROM "roomParticipantsUser" WHERE "userId" = :userId)',
+              { userId: 'be79ba4f-2455-4234-b2d2-faa53112ea9f' },
+            );
+          }),
+        )
+        .getMany();
 
-      return users.map((user) => sanitizeUser(user));
+      console.log(sql);
+
+      // return users.map((user) => sanitizeUser(user));
+      return [] as UserDto[];
     } catch (error) {
       this.logger.error(
         `Failed to retrieve all users: ${error.message}`,
@@ -135,43 +139,6 @@ export class UserService {
     }
   }
 
-  async addUserFriend(friendId: string, currentUser: UserPayload) {
-    try {
-      const friend = await this.userRepository.findOneBy({ id: friendId });
-
-      if (!friend)
-        throw new NotFoundException(
-          'An error occurred during adding friend. User does not exist',
-        );
-
-      const user = await this.userRepository.findOne({
-        where: { id: currentUser.id },
-        relations: ['friends'],
-      });
-
-      const isAlreadyFriend = user.friends.some(
-        (user) => user.id === friend.id,
-      );
-
-      if (isAlreadyFriend)
-        throw new BadRequestException(
-          'An error occurred while adding friend. Both users are already friends',
-        );
-
-      user.friends.push(friend);
-      await this.userRepository.save(user);
-
-      return {
-        status: HttpStatus.CREATED,
-        message: 'User added to friends',
-      };
-    } catch (error) {
-      this.logger.error(`Failed to add friend: ${error.message}`, error.stack);
-      throw new InternalServerErrorException(
-        `Failed to add friend with ID "${friendId}" to user`,
-      );
-    }
-  }
 
   async update(userId: string, updateUserDto: UpdateUserDto): Promise<UserDto> {
     try {

@@ -31,18 +31,4 @@ export class User {
 
   @OneToMany(() => Message, (message) => message.creator)
   messages: Message[];
-
-  @ManyToMany(() => User)
-  @JoinTable({
-    name: 'userFriends',
-    joinColumn: {
-      name: 'userId',
-      referencedColumnName: 'id',
-    },
-    inverseJoinColumn: {
-      name: 'friendId',
-      referencedColumnName: 'id',
-    },
-  })
-  friends: User[];
 }
