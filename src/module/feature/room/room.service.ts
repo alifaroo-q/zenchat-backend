@@ -48,6 +48,10 @@ export class RoomService {
       newRoom.participants = participantUsers;
       const room = await this.roomRepository.save(newRoom);
 
+      if (payload.type === RoomTypeEnum.DIRECT_CHAT) {
+        await this.userService.addFriend(client.data.user.id, participants[0]);
+      }
+
       await client.join(room.id);
     } catch (error) {
       this.logger.error(

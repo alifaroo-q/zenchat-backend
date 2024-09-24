@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   HttpStatus,
   Injectable,
   InternalServerErrorException,
@@ -7,9 +6,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { UserPayload } from 'src/types/user-payload.type';
 import { sanitizeUser } from 'src/utils/app/sanitize-user';
-import { Brackets, ILike, In, Like, Or, Repository } from 'typeorm';
+import { Brackets, In, Repository } from 'typeorm';
 import { CreateUserDto, UpdateUserDto, UserDto } from './dto';
 import { User } from './entity/user.entity';
 
@@ -64,11 +62,50 @@ export class UserService {
       });
 
       if (!user) {
-        this.logger.warn(`User with ID "${userId}" not found`);
+        this.logger.error(`User with ID "${userId}" not found`);
         throw new NotFoundException(`User with ID "${userId}" not found`);
       }
 
       return sanitize ? sanitizeUser(user) : user;
+    } catch (error) {
+      this.logger.error(`Failed to find user: ${error.message}`, error.stack);
+      throw new NotFoundException(`Failed to find user with ID "${userId}"`);
+    }
+  }
+
+  async addFriend(userId: string, friendId: string) {
+    try {
+      const user = await this.userRepository.findOne({
+        where: {
+          id: userId,
+        },
+        relations: ['friends'],
+      });
+
+      if (!user) {
+        this.logger.error(`User with ID "${userId}" not found`);
+        throw new NotFoundException(`User with ID "${userId}" not found`);
+      }
+
+      const friend = await this.userRepository.findOne({
+        where: {
+          id: friendId,
+        },
+        relations: ['friends'],
+      });
+
+      if (!friend) {
+        this.logger.error(`Friend user with ID "${friendId}" not found`);
+        throw new NotFoundException(
+          `Friend user with ID "${friendId}" not found`,
+        );
+      }
+
+      user.friends.push(friend);
+      friend.friends.push(user);
+
+      await this.userRepository.save(user);
+      await this.userRepository.save(friend);
     } catch (error) {
       this.logger.error(`Failed to find user: ${error.message}`, error.stack);
       throw new NotFoundException(`Failed to find user with ID "${userId}"`);
@@ -138,7 +175,6 @@ export class UserService {
       throw new InternalServerErrorException('Failed to retrieve all users');
     }
   }
-
 
   async update(userId: string, updateUserDto: UpdateUserDto): Promise<UserDto> {
     try {
