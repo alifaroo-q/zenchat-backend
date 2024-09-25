@@ -107,6 +107,7 @@ export class RoomService {
             id: userId,
           },
         },
+        relations: ['participants'],
       });
 
       return userRooms;
