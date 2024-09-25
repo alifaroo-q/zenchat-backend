@@ -11,6 +11,9 @@ import { Brackets, In, Repository } from 'typeorm';
 import { CreateUserDto, UpdateUserDto, UserDto } from './dto';
 import { User } from './entity/user.entity';
 import { UserPayload } from 'src/types/user-payload.type';
+import { WsException } from '@nestjs/websockets';
+import { handleWsError } from 'src/utils/app/ws-error-handler';
+import { Socket } from 'socket.io';
 
 @Injectable()
 export class UserService {
@@ -74,8 +77,10 @@ export class UserService {
     }
   }
 
-  async addFriend(userId: string, friendId: string) {
+  async addFriend(client: Socket, friendId: string) {
     try {
+      const userId = client.data.user.id;
+
       const [user, friend] = await Promise.all([
         this.userRepository.findOne({
           where: { id: userId },
@@ -87,43 +92,25 @@ export class UserService {
         }),
       ]);
 
-      if (!user) {
-        this.logger.error(`User with ID "${userId}" not found`);
-        throw new NotFoundException(`User with ID "${userId}" not found`);
-      }
-
-      if (!friend) {
-        this.logger.error(`Friend user with ID "${friendId}" not found`);
-        throw new NotFoundException(
-          `Friend user with ID "${friendId}" not found`,
-        );
+      if (!user || !friend) {
+        throw new WsException(`User with given ID not found`);
       }
 
       if (user.friends.some((friend) => friend.id === friendId)) {
-        this.logger.error(
-          `User "${userId}" is already friend with user "${friendId}"`,
-        );
-        throw new NotFoundException(
-          `User "${userId}" is already friend with user "${friendId}"`,
-        );
+        throw new WsException(`User is already friend with user "${friendId}"`);
       }
 
       if (friend.friends.some((friend) => friend.id === userId)) {
-        this.logger.error(
-          `User "${friendId}" is already friend with user "${userId}"`,
-        );
-        throw new NotFoundException(
-          `User "${friendId}" is already friend with user "${userId}"`,
-        );
+        throw new WsException(`Friend is already friend with user "${userId}"`);
       }
 
       user.friends.push(friend);
       friend.friends.push(user);
 
-      await this.userRepository.save([user, friend]);
+      return await this.userRepository.save([user, friend]);
     } catch (error) {
-      this.logger.error(`Failed to find user: ${error.message}`, error.stack);
-      throw new NotFoundException(`Failed to find user with ID "${userId}"`);
+      this.logger.error(`Error: ${error.message}`, error.stack);
+      throw new WsException(error);
     }
   }
 

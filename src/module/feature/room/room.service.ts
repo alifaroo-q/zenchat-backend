@@ -13,6 +13,7 @@ import { UserService } from '../user/user.service';
 import { Room } from './entity/room.entity';
 import { RoomTypeEnum } from 'src/enum/room-type.enum';
 import { WsException } from '@nestjs/websockets';
+import { User } from '../user/entity/user.entity';
 
 @Injectable()
 export class RoomService {
@@ -26,33 +27,42 @@ export class RoomService {
   // WEB SOCKET HANDLERS (START)
 
   async createRoom(client: Socket, payload: CreateRoomDto) {
+    if (payload.type !== RoomTypeEnum.DIRECT_CHAT) {
+      throw new WsException('Only direct chat allowed');
+    }
+
     if (
       payload.type === RoomTypeEnum.DIRECT_CHAT &&
       payload.participants.length > 1
     ) {
       throw new WsException('Direct chat can have only one participant');
     }
+
     try {
       const { participants, ...rest } = payload;
+      let roomParticipants: User[];
+
+      try {
+        roomParticipants = await this.userService.addFriend(
+          client,
+          participants[0],
+        );
+      } catch (error) {
+        this.logger.error('Error: ', error.message);
+        handleWsError(client, error, false);
+        return;
+      }
+
       const newRoom = await this.roomRepository.save({
         ...rest,
         createdBy: client.data.user.id,
         updatedBy: client.data.user.id,
       });
 
-      const participantUsers = await this.userService.findManyByIds([
-        ...participants,
-        client.data.user.id,
-      ]);
+      newRoom.participants = roomParticipants;
+      await this.roomRepository.save(newRoom);
 
-      newRoom.participants = participantUsers;
-      const room = await this.roomRepository.save(newRoom);
-
-      if (payload.type === RoomTypeEnum.DIRECT_CHAT) {
-        await this.userService.addFriend(client.data.user.id, participants[0]);
-      }
-
-      await client.join(room.id);
+      await client.join(newRoom.id);
     } catch (error) {
       this.logger.error(
         `Cannot create room for socket ${client.data.user.id}: ${error.message}`,

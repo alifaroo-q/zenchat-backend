@@ -36,7 +36,7 @@ export class MessageService {
         text: payload.message,
       });
 
-      await this.messageRepository.save(message);
+      return await this.messageRepository.save(message);
     } catch (error) {
       this.logger.error('An error occurred while creating message');
       throw new InternalServerErrorException(

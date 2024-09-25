@@ -94,11 +94,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody(new WsValidationPipe()) payload: CreateMessageDto,
   ) {
-    client
-      .to(payload.roomId)
-      .emit(WS_CLIENT_EVENTS.RECEIVED_MESSAGE, payload.message);
+    const { room, creator, ...rest } =
+      await this.messageService.createNewMessageByRoomId(client, payload);
 
-    await this.messageService.createNewMessageByRoomId(client, payload);
+    client.to(payload.roomId).emit(WS_CLIENT_EVENTS.RECEIVED_MESSAGE, rest);
+
     return true;
   }
 }
