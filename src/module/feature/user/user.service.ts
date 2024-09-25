@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   HttpStatus,
   Injectable,
   InternalServerErrorException,
@@ -7,9 +6,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { UserPayload } from 'src/types/user-payload.type';
 import { sanitizeUser } from 'src/utils/app/sanitize-user';
-import { Brackets, ILike, In, Like, Or, Repository } from 'typeorm';
+import { Brackets, In, Repository } from 'typeorm';
 import { CreateUserDto, UpdateUserDto, UserDto } from './dto';
 import { User } from './entity/user.entity';
 
@@ -64,11 +62,64 @@ export class UserService {
       });
 
       if (!user) {
-        this.logger.warn(`User with ID "${userId}" not found`);
+        this.logger.error(`User with ID "${userId}" not found`);
         throw new NotFoundException(`User with ID "${userId}" not found`);
       }
 
       return sanitize ? sanitizeUser(user) : user;
+    } catch (error) {
+      this.logger.error(`Failed to find user: ${error.message}`, error.stack);
+      throw new NotFoundException(`Failed to find user with ID "${userId}"`);
+    }
+  }
+
+  async addFriend(userId: string, friendId: string) {
+    try {
+      const [user, friend] = await Promise.all([
+        this.userRepository.findOne({
+          where: { id: userId },
+          relations: ['friends'],
+        }),
+        this.userRepository.findOne({
+          where: { id: friendId },
+          relations: ['friends'],
+        }),
+      ]);
+
+      if (!user) {
+        this.logger.error(`User with ID "${userId}" not found`);
+        throw new NotFoundException(`User with ID "${userId}" not found`);
+      }
+
+      if (!friend) {
+        this.logger.error(`Friend user with ID "${friendId}" not found`);
+        throw new NotFoundException(
+          `Friend user with ID "${friendId}" not found`,
+        );
+      }
+
+      if (user.friends.some((friend) => friend.id === friendId)) {
+        this.logger.error(
+          `User "${userId}" is already friend with user "${friendId}"`,
+        );
+        throw new NotFoundException(
+          `User "${userId}" is already friend with user "${friendId}"`,
+        );
+      }
+
+      if (friend.friends.some((friend) => friend.id === userId)) {
+        this.logger.error(
+          `User "${friendId}" is already friend with user "${userId}"`,
+        );
+        throw new NotFoundException(
+          `User "${friendId}" is already friend with user "${userId}"`,
+        );
+      }
+
+      user.friends.push(friend);
+      friend.friends.push(user);
+
+      await this.userRepository.save([user, friend]);
     } catch (error) {
       this.logger.error(`Failed to find user: ${error.message}`, error.stack);
       throw new NotFoundException(`Failed to find user with ID "${userId}"`);
@@ -113,13 +164,13 @@ export class UserService {
     try {
       const userQuery = this.userRepository.createQueryBuilder('users');
       const sql = await userQuery
-        .leftJoinAndSelect('users.rooms', 'room')
+        .leftJoinAndSelect('users.friends', 'friend')
         .where('users.firstName ILIKE :searchTerm', { searchTerm })
         .orWhere('users.lastName ILIKE :searchTerm', { searchTerm })
         .andWhere(
           new Brackets((qb) => {
             qb.where(
-              'room.id NOT IN (SELECT "roomId" FROM "roomParticipantsUser" WHERE "userId" = :userId)',
+              'users.id NOT IN (SELECT "friendId" FROM "userFriends" WHERE "userId" = :userId)',
               { userId: 'be79ba4f-2455-4234-b2d2-faa53112ea9f' },
             );
           }),
@@ -138,7 +189,6 @@ export class UserService {
       throw new InternalServerErrorException('Failed to retrieve all users');
     }
   }
-
 
   async update(userId: string, updateUserDto: UpdateUserDto): Promise<UserDto> {
     try {
