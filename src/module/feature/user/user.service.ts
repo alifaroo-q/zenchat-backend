@@ -10,6 +10,7 @@ import { sanitizeUser } from 'src/utils/app/sanitize-user';
 import { Brackets, In, Repository } from 'typeorm';
 import { CreateUserDto, UpdateUserDto, UserDto } from './dto';
 import { User } from './entity/user.entity';
+import { UserPayload } from 'src/types/user-payload.type';
 
 @Injectable()
 export class UserService {
@@ -160,27 +161,36 @@ export class UserService {
     }
   }
 
-  async findAllBySearchTerm(searchTerm: string): Promise<UserDto[]> {
+  async findAllBySearchTerm(
+    searchTerm: string,
+    currentUser: UserPayload,
+  ): Promise<UserDto[]> {
     try {
       const userQuery = this.userRepository.createQueryBuilder('users');
-      const sql = await userQuery
-        .leftJoinAndSelect('users.friends', 'friend')
-        .where('users.firstName ILIKE :searchTerm', { searchTerm })
-        .orWhere('users.lastName ILIKE :searchTerm', { searchTerm })
+      const users = await userQuery
+        .where(
+          new Brackets((qb) => {
+            qb.where('users.firstName ILIKE :searchTerm', {
+              searchTerm,
+            }).orWhere('users.lastName ILIKE :searchTerm', { searchTerm });
+          }),
+        )
         .andWhere(
           new Brackets((qb) => {
             qb.where(
               'users.id NOT IN (SELECT "friendId" FROM "userFriends" WHERE "userId" = :userId)',
-              { userId: 'be79ba4f-2455-4234-b2d2-faa53112ea9f' },
+              { userId: currentUser.id },
             );
+          }),
+        )
+        .andWhere(
+          new Brackets((qb) => {
+            qb.where('users.id <> :userId', { userId: currentUser.id });
           }),
         )
         .getMany();
 
-      console.log(sql);
-
-      // return users.map((user) => sanitizeUser(user));
-      return [] as UserDto[];
+      return users.map((user) => sanitizeUser(user));
     } catch (error) {
       this.logger.error(
         `Failed to retrieve all users: ${error.message}`,

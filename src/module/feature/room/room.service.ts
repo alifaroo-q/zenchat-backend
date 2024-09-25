@@ -55,7 +55,7 @@ export class RoomService {
       await client.join(room.id);
     } catch (error) {
       this.logger.error(
-        `Cannot create room for socket ${client.id}: ${error.message}`,
+        `Cannot create room for socket ${client.data.user.id}: ${error.message}`,
       );
       handleWsError(client, error);
     }
@@ -68,7 +68,18 @@ export class RoomService {
       await Promise.all(rooms.map((room) => client.join(room.id)));
     } catch (error) {
       this.logger.error(
-        `Cannot join rooms for socket ${client.id}: ${error.message}`,
+        `Cannot join rooms for socket ${client.data.user.id}: ${error.message}`,
+      );
+      handleWsError(client, error);
+    }
+  }
+
+  async joinSingleRoom(client: Socket, roomId: string) {
+    try {
+      await client.join(roomId);
+    } catch (error) {
+      this.logger.error(
+        `Cannot join room "${roomId}" for socket ${client.data.user.id}: ${error.message}`,
       );
       handleWsError(client, error);
     }

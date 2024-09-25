@@ -11,8 +11,10 @@ import {
 import { JwtAuthGuard } from 'src/module/core/auth/guard/jwt-auth.guard';
 import { UpdateUserDto, UserDto } from './dto';
 import { UserService } from './user.service';
+import { CurrentUser } from 'src/module/core/auth/decorator/current-user.decorator';
+import { UserPayload } from 'src/types/user-payload.type';
 
-// @UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard)
 @Controller('users')
 export class UserController {
   constructor(private readonly userService: UserService) {}
@@ -30,8 +32,9 @@ export class UserController {
   @Get('/search/:searchTerm')
   async findAllBySearchTerm(
     @Param('searchTerm') searchTerm: string,
+    @CurrentUser() currentUser: UserPayload,
   ): Promise<UserDto[]> {
-    return await this.userService.findAllBySearchTerm(searchTerm);
+    return await this.userService.findAllBySearchTerm(searchTerm, currentUser);
   }
 
   @Put(':id')

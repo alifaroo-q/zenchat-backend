@@ -18,6 +18,7 @@ import { MessageService } from '../message/message.service';
 import { RoomService } from '../room/room.service';
 import { CreateMessageDto } from './dto/create-message.dto';
 import { CreateRoomDto } from './dto/create-room.dto';
+import { JoinSignleRoomDto } from './dto/join-single-room.dto';
 
 @UseFilters(WsExceptionFilter)
 @WebSocketGateway({
@@ -67,6 +68,15 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage(WS_SEVER_EVENTS.JOIN_ROOMS)
   async handleJoinRooms(@ConnectedSocket() client: Socket) {
     await this.roomService.joinRooms(client);
+    return true;
+  }
+
+  @SubscribeMessage(WS_SEVER_EVENTS.JOIN_SINGLE_ROOM)
+  async handleJoinSingleRoom(
+    @ConnectedSocket() client: Socket,
+    @MessageBody(new WsValidationPipe()) payload: JoinSignleRoomDto,
+  ) {
+    await this.roomService.joinSingleRoom(client, payload.roomId);
     return true;
   }
 
