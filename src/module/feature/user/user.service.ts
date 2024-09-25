@@ -75,24 +75,21 @@ export class UserService {
 
   async addFriend(userId: string, friendId: string) {
     try {
-      const user = await this.userRepository.findOne({
-        where: {
-          id: userId,
-        },
-        relations: ['friends'],
-      });
+      const [user, friend] = await Promise.all([
+        this.userRepository.findOne({
+          where: { id: userId },
+          relations: ['friends'],
+        }),
+        this.userRepository.findOne({
+          where: { id: friendId },
+          relations: ['friends'],
+        }),
+      ]);
 
       if (!user) {
         this.logger.error(`User with ID "${userId}" not found`);
         throw new NotFoundException(`User with ID "${userId}" not found`);
       }
-
-      const friend = await this.userRepository.findOne({
-        where: {
-          id: friendId,
-        },
-        relations: ['friends'],
-      });
 
       if (!friend) {
         this.logger.error(`Friend user with ID "${friendId}" not found`);
@@ -101,11 +98,28 @@ export class UserService {
         );
       }
 
+      if (user.friends.some((friend) => friend.id === friendId)) {
+        this.logger.error(
+          `User "${userId}" is already friend with user "${friendId}"`,
+        );
+        throw new NotFoundException(
+          `User "${userId}" is already friend with user "${friendId}"`,
+        );
+      }
+
+      if (friend.friends.some((friend) => friend.id === userId)) {
+        this.logger.error(
+          `User "${friendId}" is already friend with user "${userId}"`,
+        );
+        throw new NotFoundException(
+          `User "${friendId}" is already friend with user "${userId}"`,
+        );
+      }
+
       user.friends.push(friend);
       friend.friends.push(user);
 
-      await this.userRepository.save(user);
-      await this.userRepository.save(friend);
+      await this.userRepository.save([user, friend]);
     } catch (error) {
       this.logger.error(`Failed to find user: ${error.message}`, error.stack);
       throw new NotFoundException(`Failed to find user with ID "${userId}"`);
@@ -150,13 +164,13 @@ export class UserService {
     try {
       const userQuery = this.userRepository.createQueryBuilder('users');
       const sql = await userQuery
-        .leftJoinAndSelect('users.rooms', 'room')
+        .leftJoinAndSelect('users.friends', 'friend')
         .where('users.firstName ILIKE :searchTerm', { searchTerm })
         .orWhere('users.lastName ILIKE :searchTerm', { searchTerm })
         .andWhere(
           new Brackets((qb) => {
             qb.where(
-              'room.id NOT IN (SELECT "roomId" FROM "roomParticipantsUser" WHERE "userId" = :userId)',
+              'users.id NOT IN (SELECT "friendId" FROM "userFriends" WHERE "userId" = :userId)',
               { userId: 'be79ba4f-2455-4234-b2d2-faa53112ea9f' },
             );
           }),
