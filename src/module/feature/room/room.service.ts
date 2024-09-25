@@ -108,6 +108,13 @@ export class RoomService {
           },
         },
         relations: ['participants'],
+        select: {
+          participants: {
+            id: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
       });
 
       return userRooms;
